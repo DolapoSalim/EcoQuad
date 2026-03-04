@@ -1028,8 +1028,8 @@ def page_landing():
         st.markdown("### Resources")
         st.markdown("""
         - [GitHub Repository](https://github.com/DolapoSalim/photoquadrats_analysis)
-        - [Documentation](https://github.com/DolapoSalim/photoquadrats_analysis#readme)
-        - [Issues & Discussions](https://github.com/DolapoSalim/photoquadrats_analysis/discussions)
+        - [Documentation](https://github.com/DolapoSalim/EcoQuad#ecoquad)
+        - [Issues & Discussions](https://github.com/DolapoSalim/EcoQuad/issues)
         """)
     
     with col2:
@@ -1314,13 +1314,13 @@ def page_analyze():
     col1, col2, col3 = st.columns(3)
     
     with col1:
-        if st.button("← Back to Upload", use_container_width=True, key="back_from_analyze"):
+        if st.button("Back to Upload", use_container_width=True, key="back_from_analyze"):
             st.session_state.page = "upload"
             st.rerun()
     
     with col3:
         if st.session_state.analysis_complete:
-            if st.button("View Results →", use_container_width=True, key="view_results"):
+            if st.button("View Results", use_container_width=True, key="view_results"):
                 st.session_state.page = "results"
                 st.rerun()
         else:
