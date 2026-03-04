@@ -9,7 +9,6 @@ from pathlib import Path
 import tempfile
 import time
 from io import BytesIO
-import supervision as sv  # Import supervision for better visualization
 
 warnings.filterwarnings('ignore')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -497,11 +496,11 @@ if "image_array" not in st.session_state:
 if "analysis_complete" not in st.session_state:
     st.session_state.analysis_complete = False
 if "use_grid" not in st.session_state:
-    st.session_state.use_grid = True  # Default to grid mode
+    st.session_state.use_grid = True
 if "grid_shape" not in st.session_state:
-    st.session_state.grid_shape = (4, 4)  # Default grid shape
+    st.session_state.grid_shape = (4, 4)
 if "frame_size_cm" not in st.session_state:
-    st.session_state.frame_size_cm = 50  # Default frame size in cm
+    st.session_state.frame_size_cm = 50
 
 
 # ========== CONFIGURATION ==========
@@ -511,15 +510,48 @@ FRAME_CONFIDENCE = 0.5
 # ========== UTILITY FUNCTIONS ==========
 @st.cache_resource
 def load_models():
-    """Load YOLO models"""
+    """Load YOLO models - searches in models folder relative to app"""
     try:
-        # Note: Update these paths to match your actual model locations
-        frame_model_path = r"C:\Users\dolap\OneDrive\Documents\DOLAPO\data-analysis\photoquadrats_analysis\model\new_frame_detector.pt"
-        seg_model_path = r"C:\Users\dolap\OneDrive\Documents\DOLAPO\data-analysis\photoquadrats_analysis\model\final_detector.pt"
+        # Get the directory where this script is located
+        app_dir = Path(__file__).parent
+        models_dir = app_dir / "models"
         
-        frame_model = YOLO(frame_model_path)
-        seg_model = YOLO(seg_model_path)
+        # Model filenames to search for
+        frame_model_names = ["new_frame_detector.pt", "frame_detector.pt", "frame_detection_model.pt"]
+        seg_model_names = ["final_detector.pt", "species_segmentation.pt", "custom_photoquad.pt"]
+        
+        # Find frame model
+        frame_model_path = None
+        for model_name in frame_model_names:
+            candidate = models_dir / model_name
+            if candidate.exists():
+                frame_model_path = candidate
+                break
+        
+        # Find segmentation model
+        seg_model_path = None
+        for model_name in seg_model_names:
+            candidate = models_dir / model_name
+            if candidate.exists():
+                seg_model_path = candidate
+                break
+        
+        if frame_model_path is None or seg_model_path is None:
+            missing = []
+            if frame_model_path is None:
+                missing.append("Frame detection model (new_frame_detector.pt, frame_detector.pt, or frame_detection_model.pt)")
+            if seg_model_path is None:
+                missing.append("Species segmentation model (final_detector.pt, species_segmentation.pt, or custom_photoquad.pt)")
+            
+            st.error(f"Could not find models:\n" + "\n".join(f"- {m}" for m in missing) + 
+                    f"\n\nPlease place your model files in: {models_dir}")
+            return None, None
+        
+        st.info(f"Loading models from: {models_dir}")
+        frame_model = YOLO(str(frame_model_path))
+        seg_model = YOLO(str(seg_model_path))
         return frame_model, seg_model
+        
     except Exception as e:
         st.error(f"Error loading models: {e}")
         return None, None
@@ -578,7 +610,6 @@ def crop_to_frame(image, frame_coords, frame_polygon=None, padding=0):
     frame_width_px = x2 - x1
     frame_height_px = y2 - y1
     avg_frame_size_px = (frame_width_px + frame_height_px) / 2
-    # Use session state frame size
     frame_size_cm = st.session_state.frame_size_cm
     scale_factor = avg_frame_size_px / frame_size_cm
     
@@ -605,33 +636,27 @@ def get_class_colors(num_classes):
 
 
 def calculate_adaptive_font_scale(cell_width, cell_height, num_lines=1):
-    """
-    Calculate adaptive font scale based on cell dimensions.
-    Returns appropriate font scale and thickness for text rendering.
-    """
-    # Base the font scale on the smaller dimension
+    """Calculate adaptive font scale based on cell dimensions."""
     min_dimension = min(cell_width, cell_height)
     
-    # Calculate base font scale (adjust these multipliers as needed)
     if min_dimension < 100:
-        font_scale = 0.3
-        thickness = 1
-    elif min_dimension < 200:
-        font_scale = 0.4
-        thickness = 1
-    elif min_dimension < 300:
         font_scale = 0.5
         thickness = 1
+    elif min_dimension < 200:
+        font_scale = 0.7
+        thickness = 1
+    elif min_dimension < 300:
+        font_scale = 0.9
+        thickness = 2
     elif min_dimension < 500:
-        font_scale = 0.6
+        font_scale = 1.2
         thickness = 2
     else:
-        font_scale = 0.8
+        font_scale = 1.5
         thickness = 2
     
-    # Reduce font scale if there are multiple lines
     if num_lines > 1:
-        font_scale *= (1.0 / (1 + (num_lines - 1) * 0.15))
+        font_scale *= (1.0 / (1 + (num_lines - 1) * 0.2))
     
     return font_scale, thickness
 
@@ -788,7 +813,6 @@ def visualize_results(image, grid_areas, grid_detections, class_masks, class_col
     viz_img = image.copy()
     overlay = viz_img.copy()
     
-    # Apply color overlay for segmentation masks
     for class_id, mask in class_masks.items():
         color = class_colors.get(class_id, (0, 255, 0))
         overlay[mask > 127] = color
@@ -820,15 +844,12 @@ def visualize_results(image, grid_areas, grid_detections, class_masks, class_col
                 else:
                     text_lines = ["Bare"]
                 
-                # Calculate adaptive font scale based on cell dimensions
                 num_lines = len(text_lines)
                 font_scale, thickness = calculate_adaptive_font_scale(col_width, row_height, num_lines)
                 
-                # Calculate line height based on font scale
                 test_size = cv.getTextSize("Test", font, font_scale, thickness)[0]
-                line_height = int(test_size[1] * 1.8)  # 1.8x for better spacing
+                line_height = int(test_size[1] * 1.8)
                 
-                # Calculate available space
                 available_height = row_height - 10
                 max_lines = max(1, available_height // line_height)
                 text_lines = text_lines[:max_lines]
@@ -840,19 +861,16 @@ def visualize_results(image, grid_areas, grid_detections, class_masks, class_col
                     text_width = text_size[0]
                     text_height = text_size[1]
                     
-                    # Center text horizontally in cell, with bounds checking
                     text_x = x_start + max(3, (col_width - text_width) // 2)
                     text_x = min(text_x, x_start + col_width - text_width - 3)
                     text_y = y_offset
                     
-                    # Draw background rectangle for better readability
                     padding = 3
                     cv.rectangle(viz_img,
                                 (text_x - padding, text_y - text_height - padding),
                                 (text_x + text_width + padding, text_y + padding),
                                 bg_color, -1)
                     
-                    # Draw text
                     cv.putText(viz_img, text, (text_x, text_y),
                               font, font_scale, text_color, thickness, cv.LINE_AA)
                     
@@ -865,7 +883,6 @@ def visualize_results(image, grid_areas, grid_detections, class_masks, class_col
 def page_landing():
     """Landing page with welcome and feature overview."""
     
-    # Hero Section
     st.markdown("""
     <div class="hero-container">
         <h1>Photoquadrat Analysis</h1>
@@ -873,7 +890,6 @@ def page_landing():
     </div>
     """, unsafe_allow_html=True)
     
-    # Step Indicator - Original Round Design
     st.markdown("""
     <div class="step-indicator">
         <div class="step-item active">
@@ -895,10 +911,9 @@ def page_landing():
     </div>
     """, unsafe_allow_html=True)
     
-    # Add navigation buttons below the visual indicator
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        pass  # Stay on this page
+        pass
     with col2:
         if st.button("Go to Upload", use_container_width=True, key="nav_2"):
             st.session_state.page = "upload"
@@ -923,16 +938,14 @@ def page_landing():
         
         st.markdown("""
         <div class="info-box info-box2">
-            <strong>💡 Tip:</strong> Best results with well-lit, straight-on quadrat photos
+            <strong>Tip:</strong> Best results with well-lit, straight-on quadrat photos
         </div>
         """, unsafe_allow_html=True)
 
         st.divider()
         
-        # Add grid toggle settings
         st.markdown("### Analysis Settings")
             
-        # Grid toggle
         use_grid = st.checkbox(
             "Enable Grid Analysis",
             value=st.session_state.use_grid,
@@ -941,7 +954,6 @@ def page_landing():
         )
         st.session_state.use_grid = use_grid
         
-        # Grid shape selector (only shown when grid is enabled)
         if use_grid:
             st.markdown("**Grid Configuration:**")
             col_a, col_b = st.columns(2)
@@ -951,10 +963,9 @@ def page_landing():
                 cols = st.number_input("Columns", min_value=2, max_value=10, value=st.session_state.grid_shape[1], key="grid_cols")
             
             st.session_state.grid_shape = (rows, cols)
-            
-            st.info(f"📐 Current grid: {rows}×{cols} cells ({rows * cols} total cells)")
+            st.info(f"Current grid: {rows}×{cols} cells ({rows * cols} total cells)")
         else:
-            st.info("📊 Whole-frame analysis mode: Coverage will be calculated for the entire image")
+            st.info("Whole-frame analysis mode: Coverage will be calculated for the entire image")
         
     
     with col2:
@@ -1001,11 +1012,10 @@ def page_landing():
 
         st.session_state.frame_size_cm = frame_size
 
-        st.info(f"📏 Frame dimensions: **{frame_size}×{frame_size} cm**")
+        st.info(f"Frame dimensions: **{frame_size}×{frame_size} cm**")
 
     st.divider()
 
-    # Call to Action
     st.markdown("""
     <div class="upload-section">
         <h2>Ready to analyze your quadrats?</h2>
@@ -1021,7 +1031,6 @@ def page_landing():
 
     st.divider()
     
-    # Info Section
     col1, col2 = st.columns(2)
     
     with col1:
@@ -1049,7 +1058,6 @@ def page_landing():
 def page_upload():
     """Upload image page."""
     
-    # Step Indicator - Original Round Design
     st.markdown("""
     <div class="step-indicator">
         <div class="step-item">
@@ -1071,7 +1079,6 @@ def page_upload():
     </div>
     """, unsafe_allow_html=True)
     
-    # Add navigation links
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         if st.button("Go to Welcome", use_container_width=True, key="nav_1_upload"):
@@ -1106,16 +1113,13 @@ def page_upload():
         if uploaded_file is not None:
             st.session_state.uploaded_file = uploaded_file
             
-            # Read and store image
             file_bytes = np.frombuffer(uploaded_file.read(), np.uint8)
             st.session_state.image_array = cv.imdecode(file_bytes, cv.IMREAD_COLOR)
             
-            # Display preview
             st.success("Image uploaded successfully!")
             
             st.image(uploaded_file, caption="Uploaded Image Preview", use_container_width=True)
             
-            # File info
             st.markdown(f"""
             <div class="info-box info-box3">
                 <strong>File Info:</strong><br>
@@ -1133,7 +1137,6 @@ def page_upload():
         Click **Start Analysis** to begin processing.
         """)
         
-        # Show current analysis settings
         st.markdown("### Analysis Mode")
         if st.session_state.use_grid:
             st.success(f"Grid Analysis: {st.session_state.grid_shape[0]}×{st.session_state.grid_shape[1]}")
@@ -1144,7 +1147,6 @@ def page_upload():
     
     st.divider()
     
-    # Action buttons
     col1, col2, col3 = st.columns(3)
     
     with col1:
@@ -1165,7 +1167,6 @@ def page_upload():
 def page_analyze():
     """Analysis page."""
     
-    # Step Indicator - Original Round Design
     st.markdown("""
     <div class="step-indicator">
         <div class="step-item">
@@ -1187,7 +1188,6 @@ def page_analyze():
     </div>
     """, unsafe_allow_html=True)
     
-    # Add navigation links
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         if st.button("Go to Welcome", use_container_width=True, key="nav_1_analyze"):
@@ -1202,41 +1202,29 @@ def page_analyze():
     with col4:
         pass
     
-    st.header("🔬 Analyzing Your Image")
+    st.header("Analyzing Your Image")
     
-    # Show analysis mode
     if st.session_state.use_grid:
         st.info(f"Running grid analysis with {st.session_state.grid_shape[0]}×{st.session_state.grid_shape[1]} cells")
     else:
         st.info("Running whole-frame analysis")
     
-    # Try to load models
     with st.spinner("Loading AI models..."):
         frame_model, seg_model = load_models()
     
     if frame_model is None or seg_model is None:
-        st.error("""
-        Could not load the analysis models. 
-        
-        Please ensure:
-        1. Model files are in the correct directory
-        2. Frame_detection_model.pt exists
-        3. Species_segmentation_model.pt exists
-        4. YOLO dependencies are installed
-        """)
+        st.error("Could not load the analysis models. Please check the models folder and try again.")
         
         if st.button("Back to Upload"):
             st.session_state.page = "upload"
             st.rerun()
         return
     
-    # Create progress tracking
     progress_bar = st.progress(0)
     status_text = st.empty()
     
     try:
-        # Step 1: Frame Detection
-        status_text.info("⏳ Step 1/4: Detecting photoquadrat frame...")
+        status_text.info("Step 1/4: Detecting photoquadrat frame...")
         progress_bar.progress(25)
         time.sleep(0.5)
         
@@ -1244,8 +1232,7 @@ def page_analyze():
             st.session_state.image_array, frame_model, FRAME_CONFIDENCE
         )
         
-        # Step 2: Crop to Frame
-        status_text.info("⏳ Step 2/4: Cropping to frame region...")
+        status_text.info("Step 2/4: Cropping to frame region...")
         progress_bar.progress(50)
         time.sleep(0.5)
         
@@ -1253,15 +1240,13 @@ def page_analyze():
             st.session_state.image_array, frame_coords, frame_polygon
         )
         
-        # Step 3: Segmentation
-        status_text.info("⏳ Step 3/4: Running species segmentation...")
+        status_text.info("Step 3/4: Running species segmentation...")
         progress_bar.progress(75)
         time.sleep(0.5)
         
         seg_results = seg_model(cropped_img, conf=CONFIDENCE_THRESHOLD)
         
-        # Step 4: Coverage Calculation
-        status_text.info("⏳ Step 4/4: Calculating coverage metrics...")
+        status_text.info("Step 4/4: Calculating coverage metrics...")
         progress_bar.progress(90)
         time.sleep(0.5)
         
@@ -1269,14 +1254,12 @@ def page_analyze():
         num_classes = len(class_names)
         class_colors = get_class_colors(num_classes)
         
-        # Use session state settings for grid analysis
         grid_areas, grid_detections, class_masks = calculate_segmentation_coverage(
             cropped_img, seg_results[0].masks, seg_results,
             use_grid=st.session_state.use_grid, 
             grid_shape=st.session_state.grid_shape
         )
         
-        # Visualization with adaptive text sizing
         viz_img = visualize_results(
             cropped_img, grid_areas, grid_detections, class_masks, class_colors,
             use_grid=st.session_state.use_grid, 
@@ -1286,7 +1269,6 @@ def page_analyze():
         progress_bar.progress(100)
         status_text.success("Analysis complete!")
         
-        # Store results
         st.session_state.analysis_results = {
             'grid_areas': grid_areas,
             'grid_detections': grid_detections,
@@ -1310,7 +1292,6 @@ def page_analyze():
     
     st.divider()
     
-    # Navigation buttons
     col1, col2, col3 = st.columns(3)
     
     with col1:
@@ -1338,7 +1319,6 @@ def page_results():
             st.rerun()
         return
     
-    # Step Indicator - Original Round Design
     st.markdown("""
     <div class="step-indicator">
         <div class="step-item">
@@ -1360,7 +1340,6 @@ def page_results():
     </div>
     """, unsafe_allow_html=True)
     
-    # Add navigation links
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         if st.button("Go to Welcome", use_container_width=True, key="nav_1_results"):
@@ -1381,13 +1360,11 @@ def page_results():
     
     results = st.session_state.analysis_results
     
-    # Display visualization
     st.markdown("### Segmentation Visualization")
     st.image(cv.cvtColor(results['viz_img'], cv.COLOR_BGR2RGB), use_container_width=True)
     
     st.divider()
     
-    # Coverage metrics
     st.markdown("### Coverage Metrics")
     
     col1, col2, col3 = st.columns(3)
@@ -1414,7 +1391,6 @@ def page_results():
     st.divider()
     
     if results.get('use_grid', True):
-        # Grid breakdown
         st.markdown("### Grid Cell Coverage")
         
         grid_data = []
@@ -1428,14 +1404,12 @@ def page_results():
             else:
                 row_data['Total'] = "Bare"
             
-            row_data['Detections'] = len(results['grid_detections'][(row, col)])
             grid_data.append(row_data)
         
         grid_df = pd.DataFrame(grid_data)
         st.dataframe(grid_df, use_container_width=True)
         
     else:
-        # Total coverage
         st.markdown("### Total Coverage")
         coverage_data = {
             'Species/Class': list(results['grid_areas'].keys()),
@@ -1446,13 +1420,11 @@ def page_results():
     
     st.divider()
     
-    # Export section
     st.markdown("### Export Results")
     
     col1, col2 = st.columns(2)
     
     with col1:
-        # Excel export
         excel_buffer = BytesIO()
         
         if results.get('use_grid', True):
@@ -1480,7 +1452,7 @@ def page_results():
         excel_buffer.seek(0)
         
         st.download_button(
-            label="📊 Download Excel Report",
+            label="Download Excel Report",
             data=excel_buffer,
             file_name="photoquadrat_analysis.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1488,11 +1460,10 @@ def page_results():
         )
     
     with col2:
-        # Image export
         _, viz_image_bytes = cv.imencode('.png', results['viz_img'])
         
         st.download_button(
-            label="🖼️ Download Visualization",
+            label="Download Visualization",
             data=viz_image_bytes.tobytes(),
             file_name="segmentation_visualization.png",
             mime="image/png",
@@ -1501,7 +1472,6 @@ def page_results():
     
     st.divider()
     
-    # Navigation
     col1, col2, col3 = st.columns(3)
     
     with col1:
