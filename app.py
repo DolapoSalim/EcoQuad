@@ -327,6 +327,22 @@ st.markdown("""
         margin-top: 20px;
     }
     
+    /* Increase table font size */
+    .stDataframe {
+        font-size: 16px !important;
+    }
+    
+    .stDataframe tbody td {
+        font-size: 16px !important;
+        padding: 12px !important;
+    }
+    
+    .stDataframe thead th {
+        font-size: 16px !important;
+        padding: 12px !important;
+        font-weight: 700;
+    }
+    
     /* Links */
     a {
         color: #40916c;
@@ -640,23 +656,24 @@ def calculate_adaptive_font_scale(cell_width, cell_height, num_lines=1):
     min_dimension = min(cell_width, cell_height)
     
     if min_dimension < 100:
-        font_scale = 0.5
+        font_scale = 0.35
         thickness = 1
     elif min_dimension < 200:
-        font_scale = 0.7
+        font_scale = 0.45
         thickness = 1
     elif min_dimension < 300:
-        font_scale = 0.9
-        thickness = 2
+        font_scale = 0.6
+        thickness = 1
     elif min_dimension < 500:
-        font_scale = 1.2
+        font_scale = 0.8
         thickness = 2
     else:
-        font_scale = 1.5
+        font_scale = 1.0
         thickness = 2
     
+    # More aggressive reduction for multiple lines to prevent overlap
     if num_lines > 1:
-        font_scale *= (1.0 / (1 + (num_lines - 1) * 0.2))
+        font_scale *= (1.0 / (1 + (num_lines - 1) * 0.35))
     
     return font_scale, thickness
 
@@ -1036,7 +1053,7 @@ def page_landing():
     with col1:
         st.markdown("### Resources")
         st.markdown("""
-        - [GitHub Repository](https://github.com/DolapoSalim/photoquadrats_analysis)
+        - [GitHub Repository](https://github.com/DolapoSalim/EcoQuad)
         - [Documentation](https://github.com/DolapoSalim/EcoQuad#ecoquad)
         - [Issues & Discussions](https://github.com/DolapoSalim/EcoQuad/issues)
         """)
