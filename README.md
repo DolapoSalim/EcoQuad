@@ -70,5 +70,5 @@ You need two pre-trained YOLO models:
 
 ---
 
-**Made with ❤️ for ecological research**
+**Made with ❤️ for ecological research** <br>
 _**Data used for production are intellectual properties of the ecology lab, Dept of Biology, University of Pisa**_
