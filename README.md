@@ -51,7 +51,7 @@ photoquadrats_analysis/
 │   ├── new_frame_detector.pt
 │   └── final_detector.pt
 ├── assets/
-│   └── header.png           # README header image (1200×400px)
+│   └── header.png
 └── README.md
 ```
 
