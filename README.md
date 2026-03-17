@@ -39,8 +39,6 @@ An AI tool designed to analyze photoquadrat images. It helps users measure speci
    streamlit run app.py
    ```
 
-The app will open at `http://localhost:8501`
-
 ## File Structure
 
 ```
